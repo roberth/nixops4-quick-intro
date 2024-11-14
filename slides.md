@@ -20,26 +20,40 @@ _class: invert lead
 - How
 - Demo
 
+Robert Hensing
+@roberth
+
+fediversity.eu
+
 
 # Why
 
+2013 - 2020
+
 - NixOps 1 is a tool to deploy NixOS systems
-- Provisioning
-- Secrets
-- Other resources, such as AWS Route53, etc
-- Python program
-- Call Nix evaluator twice
+- Provisioning, secrets
+- Also resources, e.g. AWS Route53
+- Call Nix evaluator twice (bad(TM))
 
 <!--
   calling the evaluator twice is not good enough
 -->
 
 
-# Architecture
+# Why
 
 NixOps 2
 
-2013 - 2020 - ...
+2020 - ...
+
+- Plugins
+- Polyrepo
+
+# Why
+
+NixOps 2
+
+2020 - ...
 
 ![bg right:66% height:80%](nixops2.png)
 
@@ -52,8 +66,16 @@ They did a good job with the architecture they had.
 - Ossified the architecture
 -->
 
+# Why
 
-# Architecture
+2022
+
+@roberth
+
+- Still the only tool that integrates provisioning
+
+
+# Step back
 
 Nix
 
@@ -72,7 +94,7 @@ Nix
 ```
 
 <!--
-  Explain thoroughly
+  TODO: Explain firmly
 -->
 
 # Architecture
@@ -94,6 +116,9 @@ NixOps4
 ```
 
 <!--
+
+How done is it?
+
 Adds new layer on top
 
 Focus on `nix value` => precisely that; no tight coupling between NixOps and its resources
@@ -117,10 +142,11 @@ Not comparable to NixOps 2 architecture image. NixOps 2 is "just a script" that 
   - Update
   - Delete
 
-# Resource Provider
+# Deployment
 
-- Separate process
-- executable obtained with Nix.
+Collection of resources
+- wired together with Nix expressions
+- reflecting some area of the real world
 
 # Operations
 
@@ -135,14 +161,12 @@ Not comparable to NixOps 2 architecture image. NixOps 2 is "just a script" that 
   b. Scripts depending on resource outputs 
 -->
 
-# Process Architecture
+# Resource Provider
 
-- NixOps4
-  - `nixops4-eval` -> `libnixexpr` etc (internal)
-  - resource providers
-    - `nixops4-resources-local`
-    - `nixops4-resources-opentofu` (planned)
-    - ...
+- Program built with Nix
+- Called by NixOps
+- Talks an IPC protocol
+
 
 # Expressions
 
@@ -153,9 +177,29 @@ Simplified
   outputs = inputs: {
     nixops4Deployments.default = { resources, ... }: {
       resources = {
-        "state" = {
+        <resource name> = {
           ...
         };
+      };
+    };
+  };
+}
+```
+
+<!-- These are very abstract. Clarify why. -->
+
+
+# Expressions
+
+```nix
+{ resources, ... }: {
+  resources = {
+    "nixos" = {
+      imports = [ inputs.nixos.modules.nixops4Resource.nixos ];
+      inputs = {
+        ssh.privateKey = resources.sshkeypair.privateKey;
+        ssh.host = resources.host;
+        module = ./configuration.nix;
       };
     };
   };
@@ -167,6 +211,24 @@ Simplified
 ```nix
 { resources, ... }: {
   resources = {
+    "nixos" = ...;
+    "sshkeypair" = {
+      type = "ssh.keypair";
+      inputs = {
+        state = resources.state;
+      };
+    };
+  };
+}
+```
+
+# Expressions
+
+```nix
+{ resources, ... }: {
+  resources = {
+    "nixos" = ...;
+    "sshkeypair" = ...;
     "state" = {
       type = "s3.object";
       inputs = {
@@ -181,65 +243,14 @@ Simplified
 # Expressions
 
 ```nix
-{ resources, ... }: {
-  resources = {
-    "state" = ...;
-    
-
-
-
-
-  
-  };
-}
-```
-
-# Expressions
-
-```nix
-{ resources, ... }: {
-  resources = {
-    "state" = ...;
-    "sshkey" = {
-      type = "ssh.key";
-      inputs = {
-        state = resources.state.handle;
-      };
-    };
-  };
-}
-```
-
-# Expressions
-
-```nix
-{ resources, ... }: {
-  resources = {
-    "state" = ...;
-    "sshkey" = ...;
-    "nixos" = {
-      imports = [ inputs.nixos.modules.nixops4Resource.nixos ];
-      inputs = {
-        ssh.privateKey = resources.sshkey.privateKey;
-        ssh.host = resources.host;
-        module = ./configuration.nix;
-      };
-    };
-  };
-}
-```
-
-# Expressions
-
-```nix
-{ resources, ... }: {
+{ config, resources, ... }: {
   options.customers = mkOption {
     type = attrsOf (submodule ./customer.nix);
   };
   config.resources = {
     "state" = ...;
-    "sshkey" = ...;
-    "nixos" = ...;
+    "sshkeypair" = ...;
+    "nixos" = ... (foo config.customers) ...;
   };
 }
 ```
@@ -268,8 +279,8 @@ top@{ resources, ... }: {
   resources = {
     "state" = ...;
     "my-host" = mkSequence ({ resources, ... }: {
-      "sshkey" = ... top.resources.state.handle ...;
-      "nixos" = ... resources.sshkey.privateKey ...;
+      "sshkeypair" = ... top.resources.state.handle ...;
+      "nixos" = ... resources.sshkeypair.privateKey ...;
     });
   };
 }
@@ -291,9 +302,19 @@ top@{ resources, ... }: {
 
 # Operator benefits
 
-CLI interface for the backend
+CLI for the backend
 
 Integrate arbitrary scripts, no glue code
+
+# Operator benefits
+
+# Caveats
+
+TBD
+- `mkSequence` nesting / data dependencies
+- Read, Update, Delete
+- More resources
+  - OpenTofu
 
 # Demo?
 
@@ -303,3 +324,12 @@ Integrate arbitrary scripts, no glue code
   - read multiple => migrations
 
 - `resourceProviderSystem`
+
+# Process Architecture
+
+- `nixops4`
+  - `nixops4-eval` -> `libnixexpr` etc (internal)
+  - resource providers
+    - `nixops4-resources-local`
+    - `nixops4-resources-opentofu` (planned)
+    - ...
